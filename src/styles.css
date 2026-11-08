@@ -1,0 +1,84 @@
+@import "tailwindcss";
+@import "@fontsource/ibm-plex-sans/latin-400.css";
+@import "@fontsource/ibm-plex-sans/latin-500.css";
+@import "@fontsource/ibm-plex-sans/latin-600.css";
+@import "@fontsource/fraunces/latin-500.css";
+@import "@fontsource/fraunces/latin-600.css";
+
+@theme {
+  --color-bg: #e6dfd2;
+  --color-paper: #f7f3eb;
+  --color-ink: #1c1915;
+  --color-muted: #5e584e;
+  --color-line: #ddd4c4;
+  --color-brass: #8a6414;
+  --color-brass-bright: #e6c98a;
+  --color-brass-soft: #f0e6cf;
+  --color-clay: #8d3828;
+  --color-clay-soft: #f6e7e2;
+  --color-on-ink: #d4cbbd;
+  --color-ink-line: #3f382f;
+  --font-sans: "IBM Plex Sans", "Liberation Sans", sans-serif;
+  --font-display: "Fraunces", "Liberation Serif", Georgia, serif;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    background: var(--color-bg);
+    color: var(--color-ink);
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+  }
+
+  h1,
+  h2,
+  h3 {
+    line-height: 1.15;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brass);
+    outline-offset: 2px;
+  }
+
+  dialog.ledger-dialog {
+    display: flex;
+    flex-direction: column;
+    width: min(40rem, calc(100% - 1.5rem));
+    max-height: calc(100dvh - 2rem);
+    margin: auto;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 0.75rem;
+    background: var(--color-paper);
+    color: var(--color-ink);
+  }
+
+  dialog.ledger-dialog > form {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  dialog.ledger-dialog::backdrop {
+    background: rgb(28 25 21 / 48%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
