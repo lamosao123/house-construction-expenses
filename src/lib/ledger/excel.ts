@@ -29,18 +29,32 @@ export async function downloadExcel(state: BookPayload) {
     ["Overall remaining", pesoNumber(overallLeft)],
   ];
 
-  const extraRows: (string | number)[][] = [["Additional cost", "Billed", "Paid", "Left", "Date"]];
-  for (const line of extras) {
+  const extraRows: (string | number)[][] = [[
+    "Date",
+    "Item name",
+    "Price (PHP)",
+    "Paid (PHP)",
+    "Balance (PHP)",
+    "Running cumulative total (PHP)",
+  ]];
+  let cumulative = 0;
+  const orderedExtras = extras.slice().sort((a, b) =>
+    (a.date || "").localeCompare(b.date || "") || a.order - b.order,
+  );
+  for (const line of orderedExtras) {
     const billed = lineBudget(line);
     const paid = paidOf(line, payments);
+    cumulative = Math.round((cumulative + billed) * 100) / 100;
     extraRows.push([
+      prettyDate(line.date) || line.date,
       line.name,
       pesoNumber(billed),
       pesoNumber(paid),
       pesoNumber(billed - paid),
-      prettyDate(line.date) || line.date,
+      pesoNumber(cumulative),
     ]);
   }
+  extraRows.push(["", "TOTAL ADDITIONAL EXPENSES", pesoNumber(extrasBudget), pesoNumber(extrasPaid), pesoNumber(extrasLeft), pesoNumber(extrasBudget)]);
 
   const payRows: (string | number)[][] = [["Date", "Who", "Amount", "Applies to"]];
   for (const payment of payments) {

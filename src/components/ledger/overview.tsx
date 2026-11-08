@@ -26,6 +26,7 @@ export function Overview() {
   const [payAmount, setPayAmount] = useState(0);
   const [extraPay, setExtraPay] = useState(0);
   const [extraTarget, setExtraTarget] = useState("");
+  const [extraMonth, setExtraMonth] = useState("all");
 
   const totals = bookTotals(lines, payments, project);
   const fee = project.contractorFee ?? 0;
@@ -106,6 +107,8 @@ export function Overview() {
           left={extrasLeft}
           lines={extras}
           payments={payments}
+          monthFilter={extraMonth}
+          setMonthFilter={setExtraMonth}
           extraName={extraName}
           setExtraName={setExtraName}
           extraBilled={extraBilled}
@@ -120,7 +123,7 @@ export function Overview() {
           setExtraTarget={setExtraTarget}
           onAdd={() => {
             const name = extraName.trim();
-            if (!name) return;
+            if (!name || !extraDate || !Number.isFinite(extraBilled) || extraBilled <= 0) return;
             const id = addLine({
               phaseId: "extras",
               name,
@@ -271,6 +274,8 @@ function ExtrasBoard({
   left,
   lines,
   payments,
+  monthFilter,
+  setMonthFilter,
   extraName,
   setExtraName,
   extraBilled,
@@ -296,6 +301,8 @@ function ExtrasBoard({
   left: number;
   lines: Line[];
   payments: Parameters<typeof paidOf>[1];
+  monthFilter: string;
+  setMonthFilter: (next: string) => void;
   extraName: string;
   setExtraName: (next: string) => void;
   extraBilled: number;
@@ -317,6 +324,12 @@ function ExtrasBoard({
   extraPayments: Payment[];
 }) {
   const over = left < 0;
+  const months = Array.from(new Set(lines.map((line) => line.date.slice(0, 7)).filter(Boolean))).sort().reverse();
+  const visibleLines = lines
+    .filter((line) => monthFilter === "all" || line.date.startsWith(monthFilter))
+    .slice()
+    .sort((a, b) => (b.date || "").localeCompare(a.date || "") || b.order - a.order);
+  const visibleTotal = visibleLines.reduce((sum, line) => sum + lineBudget(line), 0);
   return (
     <>
       <Hero
@@ -328,17 +341,39 @@ function ExtrasBoard({
         ratio={budget > 0 ? paid / budget : 0}
         over={over}
       />
+      <section className="rounded-lg border border-line bg-paper p-4">
+        <p className="text-xs font-medium tracking-widest text-muted uppercase">
+          Cumulative total · All additional expenses
+        </p>
+        <p className="mt-1 font-display text-3xl tabular-nums">{peso(budget)}</p>
+        <p className="mt-1 text-sm text-muted">
+          {lines.length} recorded item{lines.length === 1 ? "" : "s"}. The total includes every recorded expense, regardless of the selected month, and updates automatically when entries are added, edited, or removed.
+        </p>
+      </section>
       <section className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-line bg-line">
-        <Tile label="Billed" value={peso(budget)} />
+        <Tile label="Total expenses" value={peso(budget)} />
         <Tile label="Paid" value={peso(paid)} />
-        <Tile label={over ? "Over" : "Left"} value={peso(Math.abs(left))} clay={over} />
+        <Tile label={over ? "Over" : "Unpaid"} value={peso(Math.abs(left))} clay={over} />
       </section>
       <section className="rounded-lg border border-line bg-paper">
-        {lines.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-muted">No extras yet. Add electricity, a tank, or anything outside the contract.</p>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line p-4">
+          <div>
+            <h2 className="font-display text-xl">Expense history</h2>
+            <p className="text-xs text-muted">{visibleLines.length} shown · {peso(visibleTotal)} for selected period</p>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-muted">
+            Month
+            <select className={controlClass} value={monthFilter} onChange={(event) => setMonthFilter(event.target.value)}>
+              <option value="all">All months</option>
+              {months.map((month) => <option key={month} value={month}>{new Date(`${month}-01T00:00:00`).toLocaleDateString("en-PH", { month: "long", year: "numeric" })}</option>)}
+            </select>
+          </label>
+        </div>
+        {visibleLines.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-muted">No expenses in this period. Choose another month or add an expense below.</p>
         ) : (
           <ul>
-            {lines.map((line) => {
+            {visibleLines.map((line) => {
               const billed = lineBudget(line);
               const linePaid = paidOf(line, payments);
               const lineLeft = billed - linePaid;
@@ -347,7 +382,15 @@ function ExtrasBoard({
               return (
                 <li key={line.id} className="border-b border-line px-4 py-3">
                   <div className="flex items-start justify-between gap-3">
-                    <p className="font-medium">{line.name}</p>
+                    <div className="min-w-0">
+                      <input
+                        className="w-full min-w-0 border-b border-transparent bg-transparent font-medium outline-none focus:border-brass"
+                        aria-label={`Expense item name for ${line.name}`}
+                        value={line.name}
+                        onChange={(event) => onUpdate(line.id, { name: event.target.value })}
+                      />
+                      <p className="mt-0.5 text-xs text-muted">{prettyDate(line.date) || "No date recorded"}</p>
+                    </div>
                     <button
                       type="button"
                       className="h-11 shrink-0 px-2 text-sm text-clay"
@@ -359,9 +402,9 @@ function ExtrasBoard({
                   <Meter ratio={ratio} over={lineLeft < 0} />
                   <div className="mt-2 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
                     <div>
-                      <p className="text-xs text-muted">Billed</p>
+                      <p className="text-xs text-muted">Expense price</p>
                       <CellNum
-                        label={`Billed for ${line.name}`}
+                        label={`Expense price for ${line.name}`}
                         value={line.materialRate}
                         onChange={(next) =>
                           onUpdate(line.id, { materialRate: next, actual: next, qty: 1, laborRate: 0 })
@@ -406,11 +449,12 @@ function ExtrasBoard({
             onAdd();
           }}
         >
-          <Field label="Additional cost">
+          <Field label="Item name">
             <input
               className={controlClass}
               placeholder="Electricity, water tank…"
               aria-label="Additional cost name"
+              required
               value={extraName}
               onChange={(event) => setExtraName(event.target.value)}
             />
@@ -420,18 +464,19 @@ function ExtrasBoard({
               type="date"
               className={controlClass}
               aria-label="Date of the additional cost"
+              required
               value={extraDate}
               onChange={(event) => setExtraDate(event.target.value)}
             />
           </Field>
-          <Field label="Billed">
-            <CellNum label="Billed amount" value={extraBilled} onChange={setExtraBilled} />
+          <Field label="Expense price (₱)">
+            <CellNum label="Expense price" value={extraBilled} onChange={setExtraBilled} />
           </Field>
           <Field label="Paid">
             <CellNum label="Paid amount" value={extraPaid} onChange={setExtraPaid} />
           </Field>
-          <button type="submit" className="h-11 rounded-md bg-ink px-4 text-sm font-medium text-paper sm:col-span-2">
-            Add cost
+          <button type="submit" disabled={!extraName.trim() || !extraDate || extraBilled <= 0} className="h-11 rounded-md bg-ink px-4 text-sm font-medium text-paper disabled:cursor-not-allowed disabled:opacity-40 sm:col-span-2">
+            Add expense to cumulative total
           </button>
         </form>
       </section>

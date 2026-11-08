@@ -115,7 +115,7 @@ export function LedgerApp() {
             [
               ["overview", "Dashboard"],
               ["budget", "Budget"],
-              ["book", "Additionals"],
+              ["book", "Extra Expenses"],
               ["cash", "Payments"],
             ] as const
           ).map(([id, label]) => (
