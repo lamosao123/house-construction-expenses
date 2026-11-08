@@ -1,15 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import { BudgetPage } from "@/components/ledger/budget";
 import { CashBook } from "@/components/ledger/cash-book";
 import { CostBook } from "@/components/ledger/cost-book";
 import { LineDialog } from "@/components/ledger/line-dialog";
 import { Overview } from "@/components/ledger/overview";
-import { ShareBar } from "@/components/ledger/share-bar";
+import { ShareBar, type SyncStatus } from "@/components/ledger/share-bar";
 import { bookTotals } from "@/lib/ledger/calc";
 import { downloadExcel } from "@/lib/ledger/excel";
 import { pesoCompact } from "@/lib/ledger/money";
 import { useLedger } from "@/lib/ledger/store";
+import { loadBook, mergeBooks, saveBook, type BookPayload } from "@/lib/ledger/book";
+import { SignInButtons, SignInGate } from "@/lib/auth/gates";
 import type { Payer, Status } from "@/lib/ledger/types";
 
 type View = "overview" | "budget" | "book" | "cash";
@@ -20,6 +22,34 @@ type DialogState =
   | { mode: "edit"; lineId: string; phaseId: string };
 
 export function LedgerApp() {
+  return (
+    <SignInGate fallback={<SignInScreen />}>
+      <LedgerWorkspace />
+    </SignInGate>
+  );
+}
+
+function SignInScreen() {
+  return (
+    <main className="grid min-h-dvh place-items-center bg-bg px-5 py-10 text-ink">
+      <section className="w-full max-w-md rounded-xl border border-line bg-paper p-6 shadow-sm">
+        <p className="text-xs font-semibold tracking-[0.18em] text-brass uppercase">House cost book</p>
+        <h1 className="mt-3 font-display text-3xl">Your house project, on every device.</h1>
+        <p className="mt-3 text-sm leading-6 text-muted">
+          Sign in with the same account on your MacBook and iPhone to keep project details,
+          expenses, and payments synchronized through the cloud.
+        </p>
+        <div className="mt-6"><SignInButtons /></div>
+        <p className="mt-4 text-xs leading-5 text-muted">
+          Your financial records are private to your signed-in account. Use the same sign-in
+          provider on both devices.
+        </p>
+      </section>
+    </main>
+  );
+}
+
+function LedgerWorkspace() {
   const project = useLedger((state) => state.project);
   const phases = useLedger((state) => state.phases);
   const lines = useLedger((state) => state.lines);
@@ -34,6 +64,8 @@ export function LedgerApp() {
   const [dialog, setDialog] = useState<DialogState>(null);
   const [exported, setExported] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("connecting");
+  const syncTimer = useRef<number | null>(null);
 
   useEffect(() => {
     const done = () => setHydrated(true);
@@ -43,10 +75,102 @@ export function LedgerApp() {
     return unsub;
   }, []);
 
-  if (!hydrated) {
+  useEffect(() => {
+    if (!hydrated) return;
+    let alive = true;
+    let initialized = false;
+    let syncing = false;
+    let unsubscribe: (() => void) | undefined;
+
+    const snapshot = (): BookPayload => {
+      const state = useLedger.getState();
+      return {
+        project: state.project,
+        phases: state.phases,
+        lines: state.lines,
+        payments: state.payments,
+      };
+    };
+
+    const saveCurrent = async () => {
+      if (!alive || !navigator.onLine) {
+        if (alive) setSyncStatus("offline");
+        return;
+      }
+      setSyncStatus("saving");
+      try {
+        await saveBook(snapshot());
+        if (alive) setSyncStatus("saved");
+      } catch (error) {
+        console.error("Could not sync the house cost book", error);
+        if (alive) setSyncStatus("error");
+      }
+    };
+
+    const syncFromCloud = async () => {
+      if (!alive || syncing) return;
+      if (!navigator.onLine) {
+        setSyncStatus("offline");
+        return;
+      }
+      syncing = true;
+      setSyncStatus("syncing");
+      try {
+        const remote = await loadBook();
+        if (!alive) return;
+        const local = snapshot();
+        const chosen = remote ? mergeBooks(local, remote.book) : local;
+        if (chosen !== local) useLedger.getState().replaceBook(chosen);
+        await saveBook(chosen);
+        if (alive) setSyncStatus("saved");
+      } catch (error) {
+        console.error("Could not load the cloud house cost book", error);
+        if (alive) setSyncStatus("error");
+      } finally {
+        syncing = false;
+      }
+    };
+
+    void syncFromCloud().finally(() => {
+      if (!alive) return;
+      initialized = true;
+      unsubscribe = useLedger.subscribe((state, previous) => {
+        if (!initialized) return;
+        if (
+          state.project === previous.project &&
+          state.phases === previous.phases &&
+          state.lines === previous.lines &&
+          state.payments === previous.payments
+        ) return;
+        setSyncStatus(navigator.onLine ? "saving" : "offline");
+        if (syncTimer.current !== null) window.clearTimeout(syncTimer.current);
+        syncTimer.current = window.setTimeout(() => void saveCurrent(), 700);
+      });
+    });
+
+    const handleReconnect = () => void syncFromCloud();
+    const handleOffline = () => setSyncStatus("offline");
+    window.addEventListener("online", handleReconnect);
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("focus", handleReconnect);
+    const poll = window.setInterval(handleReconnect, 30000);
+    if (!navigator.onLine) setSyncStatus("offline");
+    return () => {
+      alive = false;
+      initialized = false;
+      unsubscribe?.();
+      window.removeEventListener("online", handleReconnect);
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("focus", handleReconnect);
+      window.clearInterval(poll);
+      if (syncTimer.current !== null) window.clearTimeout(syncTimer.current);
+    };
+  }, [hydrated]);
+
+  if (!hydrated || syncStatus === "connecting" || syncStatus === "syncing") {
     return (
       <div className="grid min-h-dvh place-items-center bg-bg text-ink">
-        <p className="text-sm text-muted">Opening your book…</p>
+        <p className="text-sm text-muted">{!hydrated ? "Opening your book…" : "Connecting your devices to the cloud…"}</p>
       </div>
     );
   }
@@ -96,7 +220,7 @@ export function LedgerApp() {
         </div>
       </header>
 
-      <ShareBar />
+      <ShareBar status={syncStatus} />
 
       <div className="grid shrink-0 grid-cols-2 gap-px border-b border-line bg-line sm:grid-cols-4">
         <Strip label="Contractor left" value={pesoCompact(Math.abs(totals.contractor.left))} clay={totals.contractor.left < 0} />

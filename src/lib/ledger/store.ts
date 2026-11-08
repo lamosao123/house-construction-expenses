@@ -81,6 +81,7 @@ type Actions = {
   addPayment: (payment: Omit<Payment, "id">) => void;
   updatePayment: (id: string, patch: Partial<Payment>) => void;
   removePayment: (id: string) => void;
+  replaceBook: (data: Data) => void;
   reset: () => void;
 };
 
@@ -163,6 +164,12 @@ export const useLedger = create<LedgerState>()(
         stamped(set, (state) => ({
           payments: state.payments.filter((payment) => payment.id !== id),
         })),
+      replaceBook: (data) => set(() => ({
+        project: data.project,
+        phases: data.phases,
+        lines: data.lines,
+        payments: data.payments,
+      })),
       reset: () => stamped(set, () => freshData()),
     }),
     {

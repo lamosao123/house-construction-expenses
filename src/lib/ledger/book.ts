@@ -20,26 +20,11 @@ function parseRow(raw: string): BookPayload {
 }
 
 export function mergeBooks(local: BookPayload, server: BookPayload): BookPayload {
+  // Treat the book as one versioned snapshot. This respects edits and deletions:
+  // union-merging arrays would resurrect records intentionally removed on one device.
   const localAt = local.project.editedAt ?? 0;
   const serverAt = server.project.editedAt ?? 0;
-  const newer = localAt >= serverAt ? local : server;
-  const older = newer === local ? server : local;
-  const lines = [...newer.lines];
-  const lineIds = new Set(lines.map((line) => line.id));
-  for (const line of older.lines) {
-    if (!lineIds.has(line.id)) lines.push(line);
-  }
-  const payments = [...newer.payments];
-  const paymentIds = new Set(payments.map((payment) => payment.id));
-  for (const payment of older.payments) {
-    if (!paymentIds.has(payment.id)) payments.push(payment);
-  }
-  const phases = [...newer.phases];
-  const phaseIds = new Set(phases.map((phase) => phase.id));
-  for (const phase of older.phases) {
-    if (!phaseIds.has(phase.id)) phases.push(phase);
-  }
-  return { project: newer.project, phases, lines, payments };
+  return localAt > serverAt ? local : server;
 }
 
 export const loadBook = createServerFn({ method: "GET" })
