@@ -231,7 +231,7 @@ export function Overview({
           <li>Set the contract and each project cost on Budget. Record what you have paid on this page.</li>
           <li>Additional costs are everything else. Their remaining is the cost minus what you have paid on that item.</li>
           <li>A payment to the contractor is never counted as an additional, and the other way around.</li>
-          <li>Saved on this device only. Download the CSV if you want a copy.</li>
+          <li>Saved on this device. Download saves a copy you can open in Excel or Sheets.</li>
         </ul>
       </details>
     </div>

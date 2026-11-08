@@ -70,7 +70,7 @@ export function LedgerApp() {
             onClick={exportCsv}
           >
             <Download className="size-4" aria-hidden="true" />
-            {exported ? "Saved" : "CSV"}
+            {exported ? "Saved" : "Download"}
           </button>
         </div>
       </header>
