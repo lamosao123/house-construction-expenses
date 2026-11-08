@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Field, CellNum, controlClass } from "@/components/ledger/fields";
+import { PaymentRow } from "@/components/ledger/overview";
 import { bookTotals } from "@/lib/ledger/calc";
 import { peso, prettyDate, todayIso } from "@/lib/ledger/money";
 import { useLedger } from "@/lib/ledger/store";
@@ -10,6 +11,7 @@ export function CashBook() {
   const payments = useLedger((state) => state.payments);
   const project = useLedger((state) => state.project);
   const addPayment = useLedger((state) => state.addPayment);
+  const updatePayment = useLedger((state) => state.updatePayment);
   const removePayment = useLedger((state) => state.removePayment);
 
   const [date, setDate] = useState(todayIso);
@@ -159,37 +161,25 @@ export function CashBook() {
             No payments yet. Record the first release of cash, a transfer, GCash, or a check.
           </p>
         ) : (
-          <ul>
+          <ul className="px-4">
             {payments.map((payment) => {
               const line = lines.find((item) => item.id === payment.lineId);
+              const detail = [
+                prettyDate(payment.date) || "No date",
+                methodLabel(payment.method),
+                payment.toContractor ? "Contractor" : line?.name,
+                payment.reference,
+              ]
+                .filter(Boolean)
+                .join(" · ");
               return (
-                <li
+                <PaymentRow
                   key={payment.id}
-                  className="flex items-start gap-3 border-b border-line px-4 py-3 last:border-b-0"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium">{payment.payee}</div>
-                    <div className="mt-0.5 text-xs text-muted">
-                      {prettyDate(payment.date) || "No date"} · {methodLabel(payment.method)}
-                      {payment.toContractor ? " · Contractor" : ""}
-                      {line ? ` · ${line.name}` : ""}
-                      {payment.reference ? ` · ${payment.reference}` : ""}
-                    </div>
-                    {payment.note ? <div className="mt-1 text-sm">{payment.note}</div> : null}
-                  </div>
-                  <div className="text-right">
-                    <div className="font-medium tabular-nums">{peso(payment.amount)}</div>
-                    <button
-                      type="button"
-                      className="mt-1 text-sm text-clay"
-                      onClick={() => {
-                        if (window.confirm("Remove this payment?")) removePayment(payment.id);
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </li>
+                  payment={payment}
+                  detail={detail}
+                  onUpdate={updatePayment}
+                  onRemove={removePayment}
+                />
               );
             })}
           </ul>

@@ -79,11 +79,25 @@ type Actions = {
   addPhase: (name: string) => string;
   renamePhase: (id: string, name: string) => void;
   addPayment: (payment: Omit<Payment, "id">) => void;
+  updatePayment: (id: string, patch: Partial<Payment>) => void;
   removePayment: (id: string) => void;
   reset: () => void;
 };
 
 export type LedgerState = Data & Actions;
+
+function stamped(
+  set: (recipe: (state: LedgerState) => Partial<LedgerState>) => void,
+  recipe: (state: LedgerState) => Partial<LedgerState>,
+) {
+  set((state) => {
+    const next = recipe(state);
+    return {
+      ...next,
+      project: { ...state.project, ...next.project, editedAt: Date.now() },
+    };
+  });
+}
 
 function freshData(): Data {
   return {
@@ -99,14 +113,14 @@ export const useLedger = create<LedgerState>()(
     (set) => ({
       ...freshData(),
       updateProject: (patch) =>
-        set((state) => ({ project: { ...state.project, ...patch } })),
+        stamped(set, (state) => ({ project: { ...state.project, ...patch } })),
       updateLine: (id, patch) =>
-        set((state) => ({
+        stamped(set, (state) => ({
           lines: state.lines.map((line) => (line.id === id ? { ...line, ...patch } : line)),
         })),
       addLine: (line) => {
         const id = crypto.randomUUID();
-        set((state) => ({
+        stamped(set, (state) => ({
           lines: [
             ...state.lines,
             { ...line, id, order: state.lines.length + 1, name: line.name.trim(), payer: line.payer ?? "contractor" },
@@ -115,7 +129,7 @@ export const useLedger = create<LedgerState>()(
         return id;
       },
       removeLine: (id) =>
-        set((state) => ({
+        stamped(set, (state) => ({
           lines: state.lines.filter((line) => line.id !== id),
           payments: state.payments.map((payment) =>
             payment.lineId === id ? { ...payment, lineId: "" } : payment,
@@ -123,7 +137,7 @@ export const useLedger = create<LedgerState>()(
         })),
       addPhase: (name) => {
         const id = crypto.randomUUID();
-        set((state) => ({
+        stamped(set, (state) => ({
           phases: [
             ...state.phases,
             { id, name: name.trim() || "New scope", blurb: "A scope you added." },
@@ -132,18 +146,24 @@ export const useLedger = create<LedgerState>()(
         return id;
       },
       renamePhase: (id, name) =>
-        set((state) => ({
+        stamped(set, (state) => ({
           phases: state.phases.map((phase) => (phase.id === id ? { ...phase, name } : phase)),
         })),
       addPayment: (payment) =>
-        set((state) => ({
+        stamped(set, (state) => ({
           payments: [{ ...payment, id: crypto.randomUUID() }, ...state.payments],
         })),
+      updatePayment: (id, patch) =>
+        stamped(set, (state) => ({
+          payments: state.payments.map((payment) =>
+            payment.id === id ? { ...payment, ...patch } : payment,
+          ),
+        })),
       removePayment: (id) =>
-        set((state) => ({
+        stamped(set, (state) => ({
           payments: state.payments.filter((payment) => payment.id !== id),
         })),
-      reset: () => set(freshData()),
+      reset: () => stamped(set, () => freshData()),
     }),
     {
       name: "house-construction-expenses-v1",

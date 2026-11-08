@@ -93,6 +93,7 @@ export type Project = {
   contractorName: string;
   contractorFee: number | null;
   bookVersion: number;
+  editedAt?: number;
 };
 
 export const defaultProject: Project = {
@@ -107,6 +108,7 @@ export const defaultProject: Project = {
   contractorName: "Contractor",
   contractorFee: 0,
   bookVersion: 3,
+  editedAt: 0,
   notes:
     "Type the contractor’s total, then record each payment. Additionals are costs you pay yourself and are not part of that contract.",
 };

@@ -5,8 +5,9 @@ import { CashBook } from "@/components/ledger/cash-book";
 import { CostBook } from "@/components/ledger/cost-book";
 import { LineDialog } from "@/components/ledger/line-dialog";
 import { Overview } from "@/components/ledger/overview";
+import { ShareBar } from "@/components/ledger/share-bar";
 import { bookTotals } from "@/lib/ledger/calc";
-import { downloadLedger } from "@/lib/ledger/csv";
+import { downloadExcel } from "@/lib/ledger/excel";
 import { pesoCompact } from "@/lib/ledger/money";
 import { useLedger } from "@/lib/ledger/store";
 import type { Payer, Status } from "@/lib/ledger/types";
@@ -32,24 +33,44 @@ export function LedgerApp() {
   const [payerFilter, setPayerFilter] = useState<Payer | "all">("all");
   const [dialog, setDialog] = useState<DialogState>(null);
   const [exported, setExported] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
+    const done = () => setHydrated(true);
+    if (useLedger.persist.hasHydrated()) done();
+    const unsub = useLedger.persist.onFinishHydration(done);
     void useLedger.persist.rehydrate();
+    return unsub;
   }, []);
 
-  const fee = totals.contractor.budget;
-  const paid = totals.contractor.paid;
-  const remaining = fee - paid;
+  if (!hydrated) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-bg text-ink">
+        <p className="text-sm text-muted">Opening your book…</p>
+      </div>
+    );
+  }
+
+  const extrasLeft = totals.owner.budget - totals.owner.paid;
+  const overallPaid = totals.contractor.paid + totals.owner.paid;
+  const overallLeft = totals.allIn - overallPaid;
   const meta = [
     project.location || "Location not set",
     `${project.stories}-storey`,
     project.floorArea > 0 ? `${project.floorArea} sqm` : "Area not set",
   ].join(" · ");
 
-  function exportCsv() {
-    downloadLedger(useLedger.getState());
-    setExported(true);
-    window.setTimeout(() => setExported(false), 2000);
+  function exportExcel() {
+    const state = useLedger.getState();
+    void downloadExcel({
+      project: state.project,
+      phases: state.phases,
+      lines: state.lines,
+      payments: state.payments,
+    }).then(() => {
+      setExported(true);
+      window.setTimeout(() => setExported(false), 2000);
+    });
   }
 
   return (
@@ -67,30 +88,32 @@ export function LedgerApp() {
           <button
             type="button"
             className="inline-flex h-11 shrink-0 items-center gap-2 rounded-md border border-ink-line px-3 text-sm text-paper"
-            onClick={exportCsv}
+            onClick={exportExcel}
           >
             <Download className="size-4" aria-hidden="true" />
-            {exported ? "Saved" : "Download"}
+            {exported ? "Saved" : "Excel"}
           </button>
         </div>
       </header>
 
+      <ShareBar />
+
       <div className="grid shrink-0 grid-cols-2 gap-px border-b border-line bg-line sm:grid-cols-4">
-        <Strip label={project.contractorName || "Contractor"} value={pesoCompact(fee)} />
-        <Strip label="Paid" value={pesoCompact(paid)} />
+        <Strip label="Contractor left" value={pesoCompact(Math.abs(totals.contractor.left))} clay={totals.contractor.left < 0} />
+        <Strip label="Extras left" value={pesoCompact(Math.abs(extrasLeft))} clay={extrasLeft < 0} />
+        <Strip label="Paid out" value={pesoCompact(overallPaid)} />
         <Strip
-          label={remaining < 0 ? "Over" : "Remaining"}
-          value={pesoCompact(Math.abs(remaining))}
-          clay={remaining < 0}
+          label={overallLeft < 0 ? "Over plan" : "Overall left"}
+          value={pesoCompact(Math.abs(overallLeft))}
+          clay={overallLeft < 0}
         />
-        <Strip label="Additionals" value={pesoCompact(totals.owner.budget)} />
       </div>
 
       <div className="shrink-0 border-b border-line bg-paper" role="tablist" aria-label="Cost book sections">
         <div className="mx-auto flex w-full max-w-5xl">
           {(
             [
-              ["overview", "Overview"],
+              ["overview", "Dashboard"],
               ["budget", "Budget"],
               ["book", "Additionals"],
               ["cash", "Payments"],
@@ -115,18 +138,7 @@ export function LedgerApp() {
       <main className="min-h-0 flex-1">
         {view === "overview" ? (
           <div className="h-full overflow-auto">
-            <Overview
-              onOpenPhase={(phaseId) => {
-                setPhaseFilter(phaseId);
-                setPayerFilter("all");
-                setView("book");
-              }}
-              onOpenAdditionals={() => {
-                setPhaseFilter("all");
-                setPayerFilter("owner");
-                setView("book");
-              }}
-            />
+            <Overview />
           </div>
         ) : null}
         {view === "budget" ? (

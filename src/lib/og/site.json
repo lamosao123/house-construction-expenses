@@ -1,4 +1,7 @@
 {
   "title": "House Construction Expenses",
+  "type": "x:game",
+  "card": "custom",
+  "banner": "/x-banner.jpg",
   "color": "8A6414"
 }
